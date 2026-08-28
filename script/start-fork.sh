@@ -2,28 +2,29 @@
 # =============================================================================
 # start-fork.sh — Start the Anvil Base mainnet fork
 # CSI ORIGIN 2026, PS-12
-#
-# Run this ONCE at the start of the hackathon (Phase 1).
-# Keep this terminal/process alive for the entire event.
-# Anvil caches all fetched state locally — no further RPC calls after startup.
-#
-# USAGE:
-#   bash script/start-fork.sh
-#
-# PREREQUISITES:
-#   - Anvil installed (part of Foundry: https://getfoundry.sh)
-#   - .env populated with BASE_RPC_URL and FORK_BLOCK_NUMBER
-#   - Or: export BASE_RPC_URL=<url> FORK_BLOCK_NUMBER=<block> before calling
-#
-# Technical Architecture §6.2, §13
-# INTERFACE_CONTRACTS.md §13.3
 # =============================================================================
 set -euo pipefail
 
-# Load .env if it exists
-if [ -f .env ]; then
-  # shellcheck source=/dev/null
-  source .env
+# Add Foundry to PATH for Linux, WSL2, Git Bash, and Windows PATHs
+for bin_dir in \
+  "$HOME/.foundry/bin" \
+  "/mnt/c/Users/admin/.foundry/bin" \
+  "/mnt/c/Users/${USER:-admin}/.foundry/bin" \
+  "/c/Users/admin/.foundry/bin"; do
+  if [ -d "$bin_dir" ]; then
+    export PATH="$bin_dir:$PATH"
+  fi
+done
+
+# Resolve project root directory dynamically
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Load .env automatically with export enabled
+if [ -f "$ROOT_DIR/.env" ]; then
+  set -o allexport
+  eval "$(tr -d '\r' < "$ROOT_DIR/.env")"
+  set +o allexport
 fi
 
 : "${BASE_RPC_URL:?BASE_RPC_URL must be set in .env or shell}"
@@ -35,10 +36,17 @@ echo "  Block: $FORK_BLOCK_NUMBER"
 echo "  RPC:   $BASE_RPC_URL"
 echo "=========================================="
 
-# --code-size-limit 40000 is REQUIRED — Uniswap v4 contracts exceed the
-# default 24576 byte limit. Omitting this flag is a documented hour-loss risk.
-# Technical Architecture §13.
-exec anvil \
+ANVIL_CMD="anvil"
+if ! command -v anvil &> /dev/null; then
+  if command -v anvil.exe &> /dev/null; then
+    ANVIL_CMD="anvil.exe"
+  else
+    echo "Error: anvil binary not found on PATH."
+    exit 1
+  fi
+fi
+
+exec "$ANVIL_CMD" \
   --fork-url "$BASE_RPC_URL" \
   --fork-block-number "$FORK_BLOCK_NUMBER" \
   --code-size-limit 40000 \
