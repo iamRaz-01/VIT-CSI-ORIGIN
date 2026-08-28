@@ -1,0 +1,19 @@
+# DCA Vault Protocol — Dependency map for Foundry
+# Managed via `forge install` / git submodules.
+# Format: <remote_path> <local_lib_dir> <commit_or_branch>
+# Run `forge install` to populate lib/ from scratch.
+
+# Core Foundry test utilities
+# forge install foundry-rs/forge-std
+
+# OpenZeppelin Contracts v5.x — ERC-4626 base, SafeERC20, Ownable, ReentrancyGuard
+# forge install OpenZeppelin/openzeppelin-contracts
+
+# Uniswap v4 Core — PoolManager, types, libraries (StateLibrary, etc.)
+# forge install Uniswap/v4-core
+
+# Uniswap v4 Periphery — BaseHook, HookMiner, PositionManager helpers
+# forge install Uniswap/v4-periphery
+
+# Aave v3 Core — IPool interface (for AaveYieldStrategy)
+# forge install aave/aave-v3-core

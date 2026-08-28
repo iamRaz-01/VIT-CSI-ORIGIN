@@ -1,0 +1,36 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+script = "script"
+optimizer = true
+optimizer_runs = 200
+# Required per Technical Architecture §13 -- v4 contracts exceed Anvil's default 24576 byte limit
+code_size_limit = 40_000
+# Base mainnet chain ID for fork consistency
+# chain = 8453
+
+# Remappings -- resolved after `forge install`, must match lib/ contents
+remappings = [
+    "@openzeppelin/=lib/openzeppelin-contracts/contracts/",
+    "@uniswap/v4-core/=lib/v4-core/",
+    "@uniswap/v4-periphery/=lib/v4-periphery/",
+    "@aave/core-v3/=lib/aave-v3-core/",
+    "forge-std/=lib/forge-std/src/",
+]
+
+[profile.default.fuzz]
+runs = 256
+
+[profile.default.invariant]
+runs = 64
+
+# RPC endpoints
+# Used by `forge script --fork-url base` and test helpers
+[rpc_endpoints]
+base         = "${BASE_RPC_URL}"
+base_sepolia = "https://sepolia.base.org"
+
+[etherscan]
+base = { key = "${ETHERSCAN_API_KEY}", url = "https://api.basescan.org/api" }
