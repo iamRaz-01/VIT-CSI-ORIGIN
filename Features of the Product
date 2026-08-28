@@ -1,0 +1,328 @@
+# REQUIRED PRODUCT FEATURES — MVP
+## CSI ORIGIN 2026, PS-12
+
+---
+
+## CRITICAL USER JOURNEY
+
+```
+USER                    DCA participant (wallet holder)
+   ↓
+PROBLEM                 Idle capital earns nothing between intervals;
+                         fixed-schedule execution ignores market conditions
+   ↓
+CORE PRODUCT ACTION      Deposit capital → held as ERC-4626 vault shares (earning yield)
+                         → decision engine evaluates TWAP deviation + urgency
+                         → coordinator withdraws only the needed tranche
+   ↓
+DECISION / OUTPUT        Execute full tranche / execute partial tranche / delay
+                         (atomic: withdrawal + swap succeed together or not at all)
+   ↓
+USER ACTION              Deposit, set bounded constraints, observe/trigger execution
+   ↓
+BUSINESS OUTCOME         Capital earns yield while waiting AND avoids bad-condition
+                         executions — provable as a $ delta vs. a naive scheduled bot
+```
+
+This journey is the only thing the MVP has to prove. Every feature below is graded against whether it's on this path.
+
+---
+
+## FEATURE CONTRACTS
+
+---
+
+### MUST HAVE
+
+---
+
+**1. Per-User Deposit & Vault Position (ERC-4626)**
+- **Purpose:** Give each user an individual, yield-bearing capital position.
+- **Target User:** DCA participant
+- **Problem It Solves:** Idle capital currently earns nothing.
+- **User Value:** Capital works for the user even before it's needed for a swap.
+- **Priority:** MUST HAVE
+- **User Story:** As a DCA participant, I want my deposited capital to earn yield automatically, so that waiting for my next execution doesn't cost me money.
+- **Acceptance Criteria:** User deposits token → receives vault shares; share value increases over time without further action.
+- **Success Metric:** Non-zero, growing yield balance visible per user between deposit and first execution.
+- **Dependencies:** None (foundation layer).
+- **Risks:** If real yield integration (e.g., Aave-wrapped vault) isn't stable in time, fall back to a simple, transparent accrual mechanism — must still be visibly real, not hardcoded.
+- **Out of Scope:** Multiple yield strategies, strategy switching, real-world yield-source failure handling.
+- **Why MVP fails without it:** This is half the core problem (idle capital). Without it there is no "yield-while-waiting" story at all — the product degrades to a plain scheduled swapper, which is a REJECTED artificial-differentiation position per the PS.
+
+---
+
+**2. Per-User Bounded DCA Constraints**
+- **Purpose:** Let each user define the guardrails within which the system is allowed to act.
+- **Target User:** DCA participant
+- **Problem It Solves:** Without explicit bounds, "autonomous" execution is unconstrained market timing — explicitly out of scope per Context.
+- **User Value:** User keeps control over frequency, size, and worst-case delay.
+- **Priority:** MUST HAVE
+- **User Story:** As a DCA participant, I want to set my frequency, target allocation, max delay, and tranche flex range, so the system never drifts from my intended plan.
+- **Acceptance Criteria:** Parameters stored per user; system respects them in every decision.
+- **Success Metric:** 100% of simulated decisions stay within configured bounds.
+- **Dependencies:** Feature 1 (vault position to which constraints apply).
+- **Risks:** Under-scoping the parameter set weakens the "bounded autonomy" claim central to the PS.
+- **Out of Scope:** UI-driven parameter tuning wizards, presets/templates.
+- **Why MVP fails without it:** "Bounded autonomy" is a named, non-negotiable requirement in the Context (§8). Without it, the product cannot claim to be safe or compliant with the PS — it becomes an unbounded trading bot, which is explicitly rejected scope.
+
+---
+
+**3. Deterministic Decision Engine (Execute Full / Partial / Delay)**
+- **Purpose:** Convert market signals + urgency into one of the three allowed actions.
+- **Target User:** DCA participant (indirect — this is the "brain," invisible but felt through outcomes)
+- **Problem It Solves:** Rigid schedules execute blindly into bad conditions.
+- **User Value:** Executions are timed/sized to avoid unnecessary cost.
+- **Priority:** MUST HAVE
+- **User Story:** As a DCA participant, I want the system to skip or shrink a purchase when conditions are bad, so I don't overpay relative to a blind schedule.
+- **Acceptance Criteria:** Given TWAP deviation and urgency (days until max-delay), engine deterministically outputs one of: execute-full, execute-partial, delay. Same inputs → same output every time (auditability).
+- **Success Metric:** Demo shows at least one delay/partial outcome and one full-execute outcome under two different simulated market states.
+- **Dependencies:** Feature 2 (constraints define urgency ceiling and tranche flex range).
+- **Risks:** Over-engineering the signal set (adding liquidity depth, full volatility modeling) burns hours for marginal demo value. **SIMPLIFY to TWAP deviation + urgency only** — this was already resolved in the prior strategy pass.
+- **Out of Scope:** ML/statistical prediction (see AI/ML Handoff), MEV-aware signal weighting.
+- **Why MVP fails without it:** This is the other half of the core problem (rigid timing). Without it, the "market-aware" claim in the PS title itself is unmet — the product is just a yield vault with a swap button.
+
+---
+
+**4. Atomic Withdraw + Swap Coordinator**
+- **Purpose:** Guarantee the vault is never left in an inconsistent state.
+- **Target User:** DCA participant (trust/safety requirement, mostly invisible unless it fails)
+- **Problem It Solves:** A hook alone cannot reach into the vault (Context §5, FACT) — someone must own atomicity.
+- **User Value:** No risk of capital being withdrawn but not swapped, or vice versa.
+- **Priority:** MUST HAVE
+- **User Story:** As a DCA participant, I want my withdrawal and swap to succeed or fail together, so my funds are never stuck in limbo.
+- **Acceptance Criteria:** `withdraw()` and `swap()` occur in one transaction; a hook rejection reverts both.
+- **Success Metric:** Forced-failure test shows vault position unchanged after a rejected swap attempt.
+- **Dependencies:** Feature 1 (vault), Feature 6 (hook to enforce conditions).
+- **Risks:** Getting revert semantics wrong is the single most likely silent bug in this build — must be explicitly tested, not assumed.
+- **Out of Scope:** Multi-step partial-fill handling, cross-chain coordination.
+- **Why MVP fails without it:** Atomicity is a named PS requirement (Context §5, §10). Without it, the architecture is technically non-compliant with the problem statement, regardless of how good the decision engine is — this is a disqualifying gap, not a nice-to-have.
+
+---
+
+**5. Uniswap v4 Hook — Execution Condition Enforcement**
+- **Purpose:** Enforce execution-time bounds (tranche size, slippage/price-impact) at the moment of swap.
+- **Target User:** DCA participant
+- **Problem It Solves:** A decision made before the swap could still be executed into worse conditions than expected by the time the transaction lands.
+- **User Value:** Hard guarantee that no swap executes outside acceptable bounds, regardless of what the off-chain/pre-swap logic decided.
+- **Priority:** MUST HAVE
+- **User Story:** As a DCA participant, I want the protocol to refuse to execute a swap that violates my slippage/impact limits, even at the last moment.
+- **Acceptance Criteria:** Hook rejects (reverts) swap attempts exceeding configured bounds; allows compliant swaps through.
+- **Success Metric:** Demo includes one deliberately-triggered rejection.
+- **Dependencies:** Feature 4 (coordinator calls the pool through the hook).
+- **Risks:** Hook logic complexity is easy to underestimate — keep enforcement rules to 2 conditions max (tranche cap, slippage/impact cap) for reliability.
+- **Out of Scope:** Dynamic/adaptive threshold tuning, MEV-specific hook logic.
+- **Why MVP fails without it:** Uniswap v4 hooks are a mandatory, named PS requirement. Without a working hook that actually enforces something, the "hook-based execution layer" claim is decorative — judges (especially the Technical Judge) will see through a hook that doesn't gate anything.
+
+---
+
+**6. Permissionless Trigger ("Poke") Function**
+- **Purpose:** Cause the evaluate → act loop to actually run, since contracts don't run on their own.
+- **Target User:** DCA participant (indirectly — this is infrastructure, not user-facing)
+- **Problem It Solves:** The Context explicitly flags the trigger mechanism as unresolved and architecturally load-bearing; without one, "continuous monitoring" is meaningless.
+- **User Value:** Enables the whole autonomous loop to function and be demoed live.
+- **Priority:** MUST HAVE
+- **User Story:** As anyone (keeper, script, or judge clicking a button), I want to call a check-and-execute function that evaluates a user's position and acts accordingly.
+- **Acceptance Criteria:** Function callable by any address; correctly no-ops if the user isn't yet eligible.
+- **Success Metric:** Live demo triggers a real state change on-chain via this function.
+- **Dependencies:** Feature 3 (decision engine).
+- **Risks:** None significant — this was the resolved forced decision from the prior strategy pass (poke function over live Chainlink/Gelato integration).
+- **Out of Scope:** Real keeper-network integration (Chainlink Automation, Gelato) — narrate as a production path, don't build it.
+- **Why MVP fails without it:** Without a trigger mechanism, nothing in the system ever executes. This is not optional infrastructure — it's the difference between a static contract and a working product.
+
+---
+
+**7. Multi-User Demo Support (≥2 distinct users/configs)**
+- **Purpose:** Prove that "multi-user, per-position" (Context §2, a repeated FACT) is real, not decorative.
+- **Target User:** DCA participant (proof point for the judging panel, not a solo-user feature)
+- **Problem It Solves:** A single-user demo cannot distinguish "per-user logic" from "one global variable."
+- **User Value:** Confidence that the system genuinely isolates and respects each user's own constraints and position.
+- **Priority:** MUST HAVE
+- **User Story:** As a judge, I want to see two users with different constraints produce different outcomes under the same market conditions, so I can trust the "multi-user" claim.
+- **Acceptance Criteria:** Two users, different frequency/max-delay/tranche settings, same market snapshot → different logged actions.
+- **Success Metric:** Visibly different decisions for user A vs. user B in the same demo run.
+- **Dependencies:** Features 1–6 (must all work per-user).
+- **Risks:** Low — mostly a matter of scripting the demo, not new engineering.
+- **Out of Scope:** More than 2 users, dynamic user onboarding flow.
+- **Why MVP fails without it:** The PS explicitly requires plural users (Context §2, non-negotiable FACT). A single-user demo directly contradicts a stated requirement and will be flagged by the Product and Technical judges.
+
+---
+
+### SHOULD HAVE
+
+---
+
+**8. Before/After Comparison (Yield Captured vs. Naive Scheduled Bot)**
+- **Purpose:** Make the measurable impact visible and legible in 10 seconds.
+- **Target User:** Judges (demo consumers), DCA participant (validates the value prop)
+- **Problem It Solves:** Without a comparison, "we optimized execution" is an unverifiable claim.
+- **User Value:** Concrete, quantified proof that the product beats the status quo.
+- **Priority:** SHOULD HAVE
+- **User Story:** As a judge, I want to see a side-by-side number — yield captured + execution quality vs. a blind scheduled bot — so the value is provable, not asserted.
+- **Acceptance Criteria:** A single computed delta (e.g., "$X more captured / Y% better avg. execution price") shown after the demo run.
+- **Success Metric:** Delta is positive and traceable to actual on-chain events from the demo, not fabricated.
+- **Dependencies:** Features 1–7 must be working first (this is a reporting layer on top of real events).
+- **Risks:** If time-boxed poorly, this becomes a distraction from finishing the core loop.
+- **Out of Scope:** Historical backtesting against real market data, statistical significance claims.
+- **Why not essential:** The core journey (deposit → yield → decision → atomic execution) can be demoed and understood without a formal comparison chart — a verbal walkthrough of the numbers can substitute if time runs out. It strengthens the story; it doesn't create it.
+
+---
+
+**9. Minimal Frontend / Status View**
+- **Purpose:** Let the team run and narrate the demo without reading raw transaction logs.
+- **Target User:** DCA participant, demo presenter
+- **Problem It Solves:** Raw contract calls are hard for judges to follow live.
+- **User Value:** Faster, clearer understanding of what just happened on-chain.
+- **Priority:** SHOULD HAVE
+- **User Story:** As a presenter, I want a simple screen showing each user's balance, constraints, and last decision, so the audience can follow the story without reading Etherscan.
+- **Acceptance Criteria:** Displays per-user vault balance, constraint settings, and decision history/log.
+- **Success Metric:** Presenter can run the entire demo without switching to a block explorer.
+- **Dependencies:** Features 1–7 (nothing to display without them).
+- **Risks:** Scope creep into a full dashboard is the most likely time sink in the whole build.
+- **Out of Scope:** Wallet connect polish, responsive design, multi-page navigation, styling beyond legibility.
+- **Why not essential:** A CLI/script + block explorer + verbal narration can substitute in a pinch. It materially improves demo clarity but the core value is provable without it.
+
+---
+
+### COULD HAVE
+
+---
+
+**10. User-Initiated Withdrawal (exit vault position anytime)**
+- **Purpose:** Basic custody expectation — user can pull capital out.
+- **Target User:** DCA participant
+- **Problem It Solves:** Trust — users expect to be able to exit.
+- **User Value:** Reduces perceived custody risk.
+- **Priority:** COULD HAVE
+- **User Story:** As a DCA participant, I want to withdraw my remaining capital at any time, so I'm not locked in.
+- **Acceptance Criteria:** User can call withdraw for their un-executed balance outside the DCA flow.
+- **Success Metric:** N/A for demo scoring — not part of the core value proof.
+- **Dependencies:** Feature 1.
+- **Risks:** None significant, but easy to skip without hurting the pitch.
+- **Out of Scope:** Partial withdrawal mid-execution, withdrawal fees/penalties.
+- **Why not essential:** Not part of the problem statement's core loop or the judged decision journey — it's baseline hygiene, not differentiation. Build only if the core 7 MUST HAVEs are done early.
+
+---
+
+### REMOVE
+
+---
+
+**11. MEV Mitigation (private mempool / commit-reveal)**
+- **Why reject:** High implementation cost (4h+), effectively unprovable in a live demo (you cannot stage a real sandwich attack convincingly in the time available), and the Context itself labels this a "design decision, not a PS mandate." Mention it as a narrated production consideration; do not build it.
+
+**12. Real Keeper Network Integration (Chainlink Automation / Gelato)**
+- **Why reject:** Already resolved in the prior strategy pass — adds an external dependency that can fail live during judging, for a capability (scheduled triggering) that the permissionless poke function already proves conceptually. Production-path narration only.
+
+**13. Multi-Token / Multi-Pool Support**
+- **Why reject:** Zero incremental judging value — the core claim (yield-while-waiting + market-aware execution) is fully proven on one pair. Adds surface area and testing burden for no differentiation gain.
+
+**14. ML/Statistical Decision Engine**
+- **Why reject (AI Value Test applied):** No training data exists; a black-box model is unauditable for a financial decision and cannot be verified by judges in real time; a deterministic rule achieves the same three-way decision with 100% reliability and full transparency. This was already REJECTED in the prior strategy pass — restated here for completeness since this task specifically asks about product features.
+
+**15. Admin Dashboard / Analytics Beyond the Single Comparison**
+- **Why reject:** Judges are evaluating one workflow, not an ops tool. Anything beyond Feature 8's single comparison metric is unused surface area competing for build hours.
+
+**16. User Onboarding / KYC Flows**
+- **Why reject:** Irrelevant to an on-chain, wallet-based protocol per Context §1 (explicitly forbids fiat/off-chain framing). Would actively contradict the domain framing.
+
+---
+
+## FINAL MVP FEATURE SET
+
+**Build (MUST HAVE):**
+1. Per-User Deposit & Vault Position (ERC-4626)
+2. Per-User Bounded DCA Constraints
+3. Deterministic Decision Engine (Execute Full / Partial / Delay)
+4. Atomic Withdraw + Swap Coordinator
+5. Uniswap v4 Hook — Execution Condition Enforcement
+6. Permissionless Trigger ("Poke") Function
+7. Multi-User Demo Support (≥2 users)
+
+**Build if time remains (SHOULD HAVE):**
+8. Before/After Comparison vs. Naive Bot
+9. Minimal Frontend / Status View
+
+**Only if everything above is done early (COULD HAVE):**
+10. User-Initiated Withdrawal
+
+---
+
+## CRITICAL DEMO PATH
+
+```
+Feature 1 (Deposit/Vault) 
+   → Feature 2 (Constraints set for 2 users) 
+   → Feature 6 (Poke triggers evaluation) 
+   → Feature 3 (Decision engine picks action per user) 
+   → Feature 4 (Coordinator executes atomically) 
+   → Feature 5 (Hook enforces/rejects at swap time — show one reject, one accept)
+   → Feature 7 (Repeat for User B with different config → different outcome)
+   → [Feature 8: show the $ delta]
+```
+
+This is the single flow that must work end-to-end, live, without fallback to slides. Everything else is supporting cast.
+
+---
+
+## FEATURE DEPENDENCY MAP
+
+```
+Feature 1 (Vault)
+   ├── Feature 2 (Constraints) — depends on 1
+   │      └── Feature 3 (Decision Engine) — depends on 2
+   │             └── Feature 6 (Poke) — depends on 3
+   │
+   ├── Feature 4 (Coordinator) — depends on 1
+   │      └── Feature 5 (Hook) — depends on 4 (called from within coordinator's swap step)
+   │
+   └── Feature 7 (Multi-user demo) — depends on 1,2,3,4,5,6 all working per-user
+
+Feature 8 (Comparison) — depends on 1–7 (reports on real events)
+Feature 9 (Frontend) — depends on 1–7 (displays real state)
+Feature 10 (Withdrawal) — depends on 1 only, independent of the rest
+```
+
+---
+
+## PRODUCT → AI/ML HANDOFF
+
+**No AI/ML capability is required for the MVP core.** This was tested explicitly (AI Value Test, Feature 3): the decision space is three discrete actions gated by two numeric signals, which a deterministic rule satisfies with full reliability and auditability — a hard requirement for an on-chain financial decision judges can verify.
+
+**If the team wants to give the AI/ML specialist a legitimate task**, the only product requirement that would justify one is:
+
+> *"If a genuinely predictive signal can be produced (e.g., short-horizon volatility forecasting) that measurably outperforms the deterministic TWAP-deviation rule on historical data, and that signal can be exposed as a simple, bounded score that plugs into the existing execute/partial/delay decision without replacing it — evaluate it as an optional enhancement input, not a replacement decision-maker."*
+
+This is a strict boundary: AI/ML may inform a signal *feeding into* the deterministic engine; it does not own the execute/partial/delay decision. Not required for MUST HAVE scope.
+
+---
+
+## PRODUCT → ARCHITECTURE HANDOFF
+
+The Architect must design a system that supports, without me prescribing how:
+
+- Per-user state (vault position, constraints, decision history) that is isolated and independently queryable/actionable.
+- A coordinator contract capable of atomic multi-step transactions (vault withdrawal + pool swap) with full-transaction revert on failure.
+- A Uniswap v4 hook capable of inspecting and rejecting a swap in-flight based on tranche size and slippage/price-impact bounds.
+- An externally-callable, permissionless function that can safely evaluate and act on any user's position with no privileged caller (idempotent / safe to call repeatedly or by anyone).
+- A way to read current price/TWAP data reliable enough for the decision engine to consume deterministically.
+- Support for at least two concurrently active user positions with independent parameter sets, demonstrable in a single test/demo run.
+
+The Architect owns exact contract structure, storage layout, gas optimization, and testing strategy.
+
+---
+
+## WHAT WE SHOULD NOT BUILD
+
+Explicit, non-negotiable for this hackathon:
+
+- MEV mitigation infrastructure (private mempool, commit-reveal)
+- Real Chainlink Automation / Gelato integration
+- Multi-token or multi-pool support
+- Any ML/statistical model as the primary decision-maker
+- Admin dashboards or analytics beyond the single before/after comparison
+- User onboarding, KYC, or fiat-adjacent flows
+- Full-featured frontend (styling, responsiveness, wallet-connect polish)
+- Configurable/pluggable yield strategy selection
+
+Every one of these would consume hours the core 7 MUST HAVE features need, without moving the judged decision — problem importance, workflow innovation, atomic execution correctness, and provable multi-user, market-aware value — forward at all.
