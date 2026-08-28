@@ -381,6 +381,27 @@ contract DCACoordinatorTest is Test {
         coordinator.poke(USER_A); // no vm.expectRevert → failure = test fail
     }
 
+    function test_doublePoke_race_isNoOp() public {
+        // §11 Failure Mode: Rapid double-poke race condition
+        // First poke succeeds and updates lastPokeTimestamp
+        // Immediate second poke in same block or rapid succession is a clean no-op
+        vm.prank(USER_A); vault.deposit(DEPOSIT_AMOUNT, USER_A);
+        vm.prank(USER_A); coordinator.setConstraints(_defaultConstraints()); // minFrequencyDays = 7
+
+        uint256 vaultBefore = vault.balanceOf(USER_A);
+        coordinator.poke(USER_A);
+        uint256 vaultAfterFirst = vault.balanceOf(USER_A);
+        assertLt(vaultAfterFirst, vaultBefore, "First poke must execute tranche");
+        uint256 tsAfterFirst = coordinator.lastPokeTimestamp(USER_A);
+
+        // Race attempt: caller tries second poke immediately
+        coordinator.poke(USER_A);
+
+        // Vault and timestamp must remain strictly untouched
+        assertEq(vault.balanceOf(USER_A), vaultAfterFirst, "Double-poke race must not execute second tranche");
+        assertEq(coordinator.lastPokeTimestamp(USER_A), tsAfterFirst, "Double-poke race must not mutate timestamp");
+    }
+
     // =========================================================================
     // P0-4 / P0-5: Eligible poke
     // =========================================================================

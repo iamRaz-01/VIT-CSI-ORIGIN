@@ -452,6 +452,24 @@ contract IntegrationTest is ForkTestBase {
         assertEq(vault.balanceOf(USER_A), sharesAfterFirst, "Vault shares unchanged on no-op");
     }
 
+    function test_doublePoke_race_isNoOp() public {
+        // §11 Named Failure Mode: Rapid double-poke race
+        vm.prank(USER_A);
+        vault.deposit(10_000e6, USER_A);
+
+        vm.prank(USER_A);
+        coordinator.setConstraints(_defaultConstraints());
+
+        uint256 sharesBefore = vault.balanceOf(USER_A);
+        coordinator.poke(USER_A);
+        uint256 sharesAfterPoke1 = vault.balanceOf(USER_A);
+        assertLt(sharesAfterPoke1, sharesBefore, "First poke pulls tranche");
+
+        // Concurrent/race attempt
+        coordinator.poke(USER_A);
+        assertEq(vault.balanceOf(USER_A), sharesAfterPoke1, "Second poke in race must be clean no-op");
+    }
+
     function test_poke_delay_leavesVaultUntouched() public {
         vm.prank(USER_A);
         vault.deposit(10_000e6, USER_A);
