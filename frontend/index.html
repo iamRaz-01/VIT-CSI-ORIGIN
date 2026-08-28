@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSI ORIGIN — DCA Vault Protocol</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.1/ethers.umd.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- HEADER -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <header>
+    <div class="header-left">
+      <h1>⚡ CSI ORIGIN</h1>
+      <span class="subtitle">Yield-Optimized DCA Engine · Uniswap v4 Hooks</span>
+    </div>
+    <div class="header-right">
+      <span id="networkBadge" class="badge badge-disconnected">● Disconnected</span>
+      <span id="blockNumber" class="block-num">#—</span>
+      <button id="btnRefresh" class="btn btn-sm" title="Refresh All State">↻ Refresh</button>
+      <button id="btnConnect" class="btn btn-primary btn-sm">Connect Wallet</button>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- PROTOCOL OVERVIEW BAR -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <section class="overview-bar">
+    <div class="stat">
+      <label>Vault Total Assets</label>
+      <span id="vaultTotalAssets">—</span>
+    </div>
+    <div class="stat">
+      <label>Vault Address</label>
+      <span id="vaultAddr" class="mono">—</span>
+    </div>
+    <div class="stat">
+      <label>Coordinator</label>
+      <span id="coordAddr" class="mono">—</span>
+    </div>
+    <div class="stat">
+      <label>Hook</label>
+      <span id="hookAddr" class="mono">—</span>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- TWO-USER PANEL GRID -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <main class="user-grid">
+    <!-- USER A PANEL -->
+    <section class="user-panel" id="panelA">
+      <div class="panel-header user-a-header">
+        <h2>👤 User A</h2>
+        <span id="addrA" class="addr mono">—</span>
+        <span id="statusA" class="user-status status-idle">Idle</span>
+      </div>
+
+      <!-- Position -->
+      <div class="card">
+        <h3>📊 Vault Position</h3>
+        <div class="kv-grid">
+          <span class="kv-label">Shares</span><span id="sharesA" class="kv-val">—</span>
+          <span class="kv-label">Assets (USDC)</span><span id="assetsA" class="kv-val">—</span>
+          <span class="kv-label">USDC Balance</span><span id="usdcBalA" class="kv-val">—</span>
+        </div>
+        <div class="card-actions">
+          <input id="depositAmtA" type="number" placeholder="USDC amount" min="0" step="1" />
+          <button class="btn btn-deposit" data-user="A">Deposit</button>
+        </div>
+      </div>
+
+      <!-- Constraints -->
+      <div class="card">
+        <h3>⚙️ Constraints</h3>
+        <div id="constraintsDisplayA" class="constraints-display">
+          <span class="no-constraints">No constraints set</span>
+        </div>
+        <details class="constraint-form-wrapper">
+          <summary class="btn btn-sm">Edit Constraints</summary>
+          <div class="constraint-form" data-user="A">
+            <label>Min Frequency (days) <input name="minFrequencyDays" type="number" value="1" min="1" /></label>
+            <label>Max Delay (days) <input name="maxDelayDays" type="number" value="7" min="1" /></label>
+            <label>Good Deviation (bps) <input name="goodDeviationBps" type="number" value="100" min="0" /></label>
+            <label>Bad Deviation (bps) <input name="badDeviationBps" type="number" value="300" min="0" /></label>
+            <label>Tranche Flex Min (bps) <input name="trancheFlexMinBps" type="number" value="5000" min="0" /></label>
+            <label>Tranche Flex Max (bps) <input name="trancheFlexMaxBps" type="number" value="10000" min="0" /></label>
+            <label>Standard Tranche (USDC) <input name="standardTrancheAmount" type="number" value="1000" min="1" /></label>
+            <label>Max Slippage (bps) <input name="maxSlippageBps" type="number" value="200" min="0" /></label>
+            <button class="btn btn-primary btn-set-constraints" data-user="A">Set Constraints</button>
+          </div>
+        </details>
+      </div>
+
+      <!-- Decision -->
+      <div class="card">
+        <h3>🧠 Latest Decision</h3>
+        <div class="kv-grid">
+          <span class="kv-label">Action</span><span id="decisionActionA" class="kv-val decision-action">—</span>
+          <span class="kv-label">Timestamp</span><span id="decisionTimeA" class="kv-val">—</span>
+          <span class="kv-label">Amount In</span><span id="decisionInA" class="kv-val">—</span>
+          <span class="kv-label">Amount Out</span><span id="decisionOutA" class="kv-val">—</span>
+          <span class="kv-label">Last Poke</span><span id="lastPokeA" class="kv-val">—</span>
+        </div>
+      </div>
+
+      <!-- Poke -->
+      <div class="card poke-card">
+        <button id="btnPokeA" class="btn btn-poke btn-lg">⚡ Poke User A</button>
+        <div id="pokeResultA" class="poke-result"></div>
+      </div>
+    </section>
+
+    <!-- USER B PANEL -->
+    <section class="user-panel" id="panelB">
+      <div class="panel-header user-b-header">
+        <h2>👤 User B</h2>
+        <span id="addrB" class="addr mono">—</span>
+        <span id="statusB" class="user-status status-idle">Idle</span>
+      </div>
+
+      <!-- Position -->
+      <div class="card">
+        <h3>📊 Vault Position</h3>
+        <div class="kv-grid">
+          <span class="kv-label">Shares</span><span id="sharesB" class="kv-val">—</span>
+          <span class="kv-label">Assets (USDC)</span><span id="assetsB" class="kv-val">—</span>
+          <span class="kv-label">USDC Balance</span><span id="usdcBalB" class="kv-val">—</span>
+        </div>
+        <div class="card-actions">
+          <input id="depositAmtB" type="number" placeholder="USDC amount" min="0" step="1" />
+          <button class="btn btn-deposit" data-user="B">Deposit</button>
+        </div>
+      </div>
+
+      <!-- Constraints -->
+      <div class="card">
+        <h3>⚙️ Constraints</h3>
+        <div id="constraintsDisplayB" class="constraints-display">
+          <span class="no-constraints">No constraints set</span>
+        </div>
+        <details class="constraint-form-wrapper">
+          <summary class="btn btn-sm">Edit Constraints</summary>
+          <div class="constraint-form" data-user="B">
+            <label>Min Frequency (days) <input name="minFrequencyDays" type="number" value="1" min="1" /></label>
+            <label>Max Delay (days) <input name="maxDelayDays" type="number" value="7" min="1" /></label>
+            <label>Good Deviation (bps) <input name="goodDeviationBps" type="number" value="100" min="0" /></label>
+            <label>Bad Deviation (bps) <input name="badDeviationBps" type="number" value="300" min="0" /></label>
+            <label>Tranche Flex Min (bps) <input name="trancheFlexMinBps" type="number" value="5000" min="0" /></label>
+            <label>Tranche Flex Max (bps) <input name="trancheFlexMaxBps" type="number" value="10000" min="0" /></label>
+            <label>Standard Tranche (USDC) <input name="standardTrancheAmount" type="number" value="1000" min="1" /></label>
+            <label>Max Slippage (bps) <input name="maxSlippageBps" type="number" value="200" min="0" /></label>
+            <button class="btn btn-primary btn-set-constraints" data-user="B">Set Constraints</button>
+          </div>
+        </details>
+      </div>
+
+      <!-- Decision -->
+      <div class="card">
+        <h3>🧠 Latest Decision</h3>
+        <div class="kv-grid">
+          <span class="kv-label">Action</span><span id="decisionActionB" class="kv-val decision-action">—</span>
+          <span class="kv-label">Timestamp</span><span id="decisionTimeB" class="kv-val">—</span>
+          <span class="kv-label">Amount In</span><span id="decisionInB" class="kv-val">—</span>
+          <span class="kv-label">Amount Out</span><span id="decisionOutB" class="kv-val">—</span>
+          <span class="kv-label">Last Poke</span><span id="lastPokeB" class="kv-val">—</span>
+        </div>
+      </div>
+
+      <!-- Poke -->
+      <div class="card poke-card">
+        <button id="btnPokeB" class="btn btn-poke btn-lg">⚡ Poke User B</button>
+        <div id="pokeResultB" class="poke-result"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- EVENT LOG -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <section class="event-log-section">
+    <h2>📋 Event Log</h2>
+    <div id="eventLog" class="event-log">
+      <div class="event-entry event-info">Waiting for connection…</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- TOAST CONTAINER -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="config.js"></script>
+  <script src="abi.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
