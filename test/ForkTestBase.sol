@@ -77,8 +77,7 @@ abstract contract ForkTestBase is Test {
     // -------------------------------------------------------------------------
     function _fundWallet(address wallet) internal {
         vm.deal(wallet, DEMO_ETH_AMOUNT);
-        vm.prank(USDC_WHALE);
-        IERC20(USDC).transfer(wallet, DEMO_USDC_AMOUNT);
+        deal(USDC, wallet, DEMO_USDC_AMOUNT);
     }
 
     // -------------------------------------------------------------------------
