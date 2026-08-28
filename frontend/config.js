@@ -14,9 +14,9 @@ const CONFIG = {
   // ── Deployed Contract Addresses ─────────────────────────────────────
   // From broadcast/DeployFrontend.s.sol/8453/run-latest.json
   contracts: {
-    usdc:         "0x4e88df059cdc4c1a1e4a1dfcbee9649f11c35291",
-    vault:        "0x8c675bbe13724feb226e80fd38a8dd9916d89e3d",
-    coordinator:  "0x900f012f6025d64afaebc63013588ded7f84973c",
+    usdc:         "0x61C7f4616414C22deE1f037a45D9676683eC59A4",
+    vault:        "0x7B1D836C330D86eB01d01EF7CA66C27bc0dD21a7",
+    coordinator:  "0xE1e9653d49aF6aaD24553b15258c3FdcFEa96689",
     hook:         "0x0000000000000000000000000000000000000000",  // Not deployed in stub mode
   },
 
