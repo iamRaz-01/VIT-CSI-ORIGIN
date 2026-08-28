@@ -1,4 +1,4 @@
-# ORIGIN — Yield-Optimized DCA on Uniswap v4
+# HookDCA
 
 > **CSI ORIGIN 2026 · Problem Statement 12**
 
